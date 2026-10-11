@@ -1,4 +1,45 @@
 {
-  "name": "SheepVision",
-  "displayName": "SheepVision"
+  "expo": {
+    "name": "SheepVision",
+    "slug": "sheepvision",
+    "scheme": "sheepvision",
+    "orientation": "portrait",
+    "userInterfaceStyle": "automatic",
+    "android": {
+      "package": "com.sheepvision.app",
+      "permissions": [
+        "CAMERA"
+      ]
+    },
+    "plugins": [
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Allow SheepVision to access your camera to scan sheep QR codes."
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Allow SheepVision to access your photos to add sheep images."
+        }
+      ],
+      "expo-font",
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/sheepvision-splash.png",
+          "imageWidth": 288,
+          "resizeMode": "contain",
+          "backgroundColor": "#071B16",
+          "dark": {
+            "image": "./assets/sheepvision-splash.png",
+            "backgroundColor": "#071B16"
+          }
+        }
+      ],
+      "expo-asset",
+      "@react-native-community/datetimepicker"
+    ]
+  }
 }
