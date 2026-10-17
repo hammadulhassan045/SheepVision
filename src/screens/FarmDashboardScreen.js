@@ -1,468 +1,601 @@
-﻿import React, {useEffect, useMemo, useState} from 'react';
+﻿import React, {useCallback, useEffect, useState} from 'react';
 import {
+  ActivityIndicator,
+  Alert,
   ScrollView,
+  StatusBar,
   StyleSheet,
   Text,
   TouchableOpacity,
   View,
 } from 'react-native';
 import {MaterialIcons} from '@expo/vector-icons';
-import AppButton from '../components/AppButton';
-import EmptyState from '../components/EmptyState';
+
 import {getFarmUsers} from '../services/farmService';
 import {getFlocksByFarm} from '../services/flockService';
 import {fetchSheepByFarm} from '../services/sheepService';
 
-const formatCurrency = value =>
-  `₨ ${Number(value || 0).toLocaleString('en-PK')}`;
+const GREEN = '#176B4B';
+const DARK = '#183B2C';
+const MUTED = '#718078';
+
+const NAV_ITEMS = [
+  {label: 'Home', icon: 'home', route: 'Dashboard'},
+  {label: 'Sheep', icon: 'pets', route: 'Sheep'},
+  {label: 'Scan', icon: 'qr-code-scanner', route: 'Scan'},
+  {label: 'Records', icon: 'assignment', route: 'Records'},
+  {label: 'Profile', icon: 'person-outline', route: 'Profile'},
+];
 
 export default function FarmDashboardScreen({navigation, route}) {
   const farm = route?.params?.farm || route?.params?.selectedFarm || null;
-  const [flocks, setFlocks] = useState([]);
+
   const [sheep, setSheep] = useState([]);
-  const [farmUsers, setFarmUsers] = useState([]);
+  const [flocks, setFlocks] = useState([]);
+  const [members, setMembers] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [managementOpen, setManagementOpen] = useState(false);
+
+  const loadData = useCallback(async () => {
+    if (!farm?.farm_id) {
+      setSheep([]);
+      setFlocks([]);
+      setMembers([]);
+      setLoading(false);
+      return;
+    }
+
+    try {
+      setLoading(true);
+      setError('');
+
+      const [sheepData, flockData, memberData] = await Promise.all([
+        fetchSheepByFarm(farm.farm_id),
+        getFlocksByFarm(farm.farm_id),
+        getFarmUsers(farm.farm_id),
+      ]);
+
+      setSheep(Array.isArray(sheepData) ? sheepData : []);
+      setFlocks(Array.isArray(flockData) ? flockData : []);
+      setMembers(Array.isArray(memberData) ? memberData : []);
+    } catch (e) {
+      setError(e?.message || 'Unable to load farm information.');
+    } finally {
+      setLoading(false);
+    }
+  }, [farm?.farm_id]);
 
   useEffect(() => {
-    const loadFarmData = async () => {
-      if (!farm?.farm_id) {
-        setLoading(false);
-        return;
-      }
+    loadData();
+  }, [loadData]);
 
-      try {
-        const [flockData, sheepData, farmUserData] = await Promise.all([
-          getFlocksByFarm(farm.farm_id),
-          fetchSheepByFarm(farm.farm_id),
-          getFarmUsers(farm.farm_id),
-        ]);
+  const openManagement = () => setManagementOpen(true);
 
-        setFlocks(flockData || []);
-        setSheep(sheepData || []);
-        setFarmUsers(farmUserData || []);
-      } catch (error) {
-        console.warn('Unable to load farm data', error);
-      } finally {
-        setLoading(false);
-      }
-    };
+  const openAddSheep = () => {
+    setManagementOpen(false);
 
-    loadFarmData();
-  }, [farm]);
+    navigation.navigate('AddSheep', {
+      farm,
+      flockId: flocks[0]?.flock_id || '',
+    });
+  };
 
-  const summaryCards = useMemo(
-    () => [
-      {value: sheep.length, label: 'Total Sheep', icon: '🐑'},
-      {value: flocks.length, label: 'Flocks', icon: '🐏'},
-      {value: farmUsers.length, label: 'Farm Users', icon: '👥'},
-      {value: formatCurrency(0), label: 'This Month', icon: '₨'},
-    ],
-    [farmUsers.length, flocks.length, sheep.length],
+  const openSheepList = action => {
+    setManagementOpen(false);
+
+    navigation.navigate('Sheep', {
+      farm,
+      managementAction: action,
+    });
+  };
+
+  const goTo = screen => navigation.navigate(screen);
+
+  const stats = [
+    {label: 'Total Sheep', value: sheep.length, icon: 'pets'},
+    {label: 'Flocks', value: flocks.length, icon: 'groups'},
+    {label: 'Farm Members', value: members.length, icon: 'people-outline'},
+  ];
+
+  const renderManagement = () => (
+    <View style={styles.screen}>
+      <StatusBar barStyle="dark-content" backgroundColor="#F4F7F2" />
+
+      <View style={styles.managementHeader}>
+        <TouchableOpacity
+          style={styles.backButton}
+          onPress={() => setManagementOpen(false)}>
+          <MaterialIcons name="arrow-back" size={23} color={DARK} />
+        </TouchableOpacity>
+
+        <View style={{flex: 1, marginLeft: 13}}>
+          <Text style={styles.managementTitle}>Sheep Management</Text>
+          <Text style={styles.muted}>Manage your registered sheep</Text>
+        </View>
+      </View>
+
+      <ScrollView contentContainerStyle={styles.managementContent}>
+        <View style={styles.managementBanner}>
+          <MaterialIcons name="pets" size={34} color="#FFFFFF" />
+          <View style={{flex: 1, marginLeft: 14}}>
+            <Text style={styles.bannerTitle}>Your Sheep Records</Text>
+            <Text style={styles.bannerSubtitle}>
+              {loading ? 'Loading...' : `${sheep.length} sheep registered`}
+            </Text>
+          </View>
+        </View>
+
+        <Text style={styles.sectionTitle}>Choose an action</Text>
+
+        <ManagementAction
+          icon="add-circle-outline"
+          title="Add Sheep"
+          description="Register a new sheep and generate its tag."
+          color={GREEN}
+          onPress={openAddSheep}
+        />
+
+        <ManagementAction
+          icon="remove-circle-outline"
+          title="Remove Sheep"
+          description="Manage a sheep's membership in a flock."
+          color="#B7791F"
+          onPress={() => openSheepList('remove')}
+        />
+
+        <ManagementAction
+          icon="delete-outline"
+          title="Delete Sheep"
+          description="Open sheep records to manage deletion."
+          color="#C0392B"
+          onPress={() => {
+            Alert.alert('Delete Sheep', 'Select a sheep record to continue.', [
+              {text: 'Cancel', style: 'cancel'},
+              {
+                text: 'View Sheep',
+                onPress: () => openSheepList('delete'),
+              },
+            ]);
+          }}
+        />
+
+        <View style={styles.note}>
+          <MaterialIcons name="info-outline" size={19} color={GREEN} />
+          <Text style={styles.noteText}>
+            Removing a sheep from a flock and permanently deleting its record
+            are different actions.
+          </Text>
+        </View>
+      </ScrollView>
+
+      <BottomNavigation navigation={navigation} active="Sheep" />
+    </View>
   );
 
-  const quickActions = useMemo(
-    () => [
-      {
-        title: 'Add Sheep',
-        subtitle: 'Register',
-        icon: 'add-circle-outline',
-        onPress: () =>
-          navigation.navigate('AddSheep', {
-            farm,
-            flockId: flocks[0]?.flock_id,
-          }),
-      },
-      {
-        title: 'Remove Sheep',
-        subtitle: 'Archive',
-        icon: 'delete-outline',
-        onPress: () => navigation.navigate('Sheep'),
-      },
-      {
-        title: 'Sheep Records',
-        subtitle: 'Track',
-        icon: 'assignment',
-        onPress: () => navigation.navigate('Records'),
-      },
-      {
-        title: 'Add Flock',
-        subtitle: 'Create',
-        icon: 'groups',
-        onPress: () => navigation.navigate('AddFlock', {farmId: farm?.farm_id}),
-      },
-      {
-        title: 'Farm Users',
-        subtitle: 'Access',
-        icon: 'people-outline',
-        onPress: () => navigation.navigate('FarmUsers', {farmId: farm?.farm_id}),
-      },
-      {
-        title: 'Scan QR',
-        subtitle: 'Identify',
-        icon: 'qr-code-scanner',
-        onPress: () => navigation.navigate('Scan'),
-      },
-      {
-        title: 'Finance',
-        subtitle: 'Overview',
-        icon: 'account-balance-wallet',
-        onPress: () => navigation.navigate('Finance'),
-      },
-      {
-        title: 'Expenses',
-        subtitle: 'Costs',
-        icon: 'receipt-long',
-        onPress: () => navigation.navigate('Finance'),
-      },
-      {
-        title: 'Reports',
-        subtitle: 'Summary',
-        icon: 'bar-chart',
-        onPress: () => navigation.navigate('Reports'),
-      },
-    ],
-    [farm, flocks, navigation],
-  );
-
-  const recentActivity = useMemo(() => {
-    const items = [];
-
-    if (sheep.length > 0) {
-      items.push({
-        icon: '🐑',
-        title: `${sheep.length} sheep currently registered`,
-        detail: 'Today',
-      });
-    }
-
-    if (flocks.length > 0) {
-      items.push({
-        icon: '🐏',
-        title: `${flocks.length} flock(s) active`,
-        detail: 'This week',
-      });
-    }
-
-    if (farmUsers.length > 0) {
-      items.push({
-        icon: '👥',
-        title: `${farmUsers.length} farm user(s) have access`,
-        detail: 'Today',
-      });
-    }
-
-    if (!items.length) {
-      return [
-        {
-          icon: '📋',
-          title: 'No recent farm activity',
-          detail: 'Add a flock or register a sheep to get started.',
-        },
-      ];
-    }
-
-    return items.slice(0, 3);
-  }, [farmUsers.length, flocks.length, sheep.length]);
+  if (managementOpen) {
+    return renderManagement();
+  }
 
   return (
-    <ScrollView style={styles.screen} contentContainerStyle={styles.content}>
-      <View style={styles.headerRow}>
-        <View style={styles.headerInfo}>
-          <Text style={styles.eyebrow}>Farm dashboard</Text>
-          <Text style={styles.farmName}>{farm?.farm_name || 'Green Valley Farm'}</Text>
-          <Text style={styles.locationText}>
-            {farm?.district || 'Khushab'} / {farm?.province || 'Punjab'}
+    <View style={styles.screen}>
+      <StatusBar barStyle="light-content" backgroundColor={DARK} />
+
+      <ScrollView
+        contentContainerStyle={styles.dashboardContent}
+        showsVerticalScrollIndicator={false}>
+        <View style={styles.hero}>
+          <View style={styles.heroTop}>
+            <View style={styles.brandIcon}>
+              <MaterialIcons name="grass" size={25} color="#FFFFFF" />
+            </View>
+
+            <TouchableOpacity style={styles.refreshButton} onPress={loadData}>
+              <MaterialIcons name="refresh" size={21} color="#FFFFFF" />
+            </TouchableOpacity>
+          </View>
+
+          <Text style={styles.eyebrow}>SHEEPVISION</Text>
+          <Text style={styles.farmName}>
+            {farm?.farm_name || 'Welcome to your farm'}
           </Text>
+          <Text style={styles.heroSubtitle}>Manage your sheep, your way.</Text>
+        </View>
+
+        <View style={styles.stats}>
+          {stats.map(item => (
+            <View style={styles.statCard} key={item.label}>
+              <MaterialIcons name={item.icon} size={23} color={GREEN} />
+              <Text style={styles.statValue}>{loading ? '—' : item.value}</Text>
+              <Text style={styles.statLabel}>{item.label}</Text>
+            </View>
+          ))}
+        </View>
+
+        <View style={styles.sectionHeader}>
+          <Text style={styles.sectionTitle}>Quick Actions</Text>
         </View>
 
         <TouchableOpacity
-          accessibilityRole="button"
-          onPress={() => navigation.navigate('More')}
-          style={styles.settingsButton}>
-          <MaterialIcons name="settings" size={22} color="#0F8A5F" />
+          activeOpacity={0.85}
+          style={styles.managementButton}
+          onPress={openManagement}>
+          <View style={styles.managementButtonIcon}>
+            <MaterialIcons name="pets" size={29} color={GREEN} />
+          </View>
+
+          <View style={{flex: 1}}>
+            <Text style={styles.managementButtonTitle}>Sheep Management</Text>
+            <Text style={styles.managementButtonSubtitle}>
+              Add, remove and manage sheep records
+            </Text>
+          </View>
+
+          <MaterialIcons name="chevron-right" size={26} color={GREEN} />
         </TouchableOpacity>
-      </View>
 
-      <View style={styles.summaryGrid}>
-        {summaryCards.map(card => (
-          <View key={card.label} style={styles.summaryCard}>
-            <Text style={styles.summaryIcon}>{card.icon}</Text>
-            <Text style={styles.summaryValue}>{card.value}</Text>
-            <Text style={styles.summaryLabel}>{card.label}</Text>
-          </View>
-        ))}
-      </View>
-
-      <View style={styles.financePanel}>
-        <View style={styles.financeHeaderRow}>
-          <Text style={styles.sectionTitle}>Financial Summary</Text>
-          <Text style={styles.balanceBadge}>Balance</Text>
+        <View style={styles.actionsGrid}>
+          <SmallAction
+            icon="groups"
+            title="Manage Flocks"
+            onPress={() =>
+              navigation.navigate('AddFlock', {
+                farmId: farm?.farm_id,
+                farm,
+              })
+            }
+          />
+          <SmallAction
+            icon="people-outline"
+            title="Farm Members"
+            onPress={() =>
+              navigation.navigate('FarmUsers', {
+                farmId: farm?.farm_id,
+                farm,
+              })
+            }
+          />
+          <SmallAction
+            icon="account-balance-wallet"
+            title="Finances"
+            onPress={() => navigation.navigate('Finance', {farm})}
+          />
+          <SmallAction
+            icon="bar-chart"
+            title="Reports"
+            onPress={() => navigation.navigate('Reports', {farm})}
+          />
         </View>
 
-        <View style={styles.financeColumns}>
-          <View style={styles.financeColumn}>
-            <Text style={styles.financeLabel}>Income</Text>
-            <Text style={styles.financeValue}>{formatCurrency(0)}</Text>
-          </View>
-          <View style={styles.financeColumn}>
-            <Text style={styles.financeLabel}>Expenses</Text>
-            <Text style={styles.financeValue}>{formatCurrency(0)}</Text>
-          </View>
-          <View style={styles.financeColumnAccent}>
-            <Text style={styles.financeLabel}>Net</Text>
-            <Text style={styles.financeValue}>{formatCurrency(0)}</Text>
-          </View>
+        <View style={styles.sectionHeader}>
+          <Text style={styles.sectionTitle}>Farm Overview</Text>
         </View>
+
+        <View style={styles.overviewCard}>
+          {loading ? (
+            <ActivityIndicator color={GREEN} />
+          ) : error ? (
+            <Text style={styles.errorText}>{error}</Text>
+          ) : (
+            <>
+              <OverviewRow label="Registered Sheep" value={sheep.length} />
+              <OverviewRow label="Available Flocks" value={flocks.length} />
+              <OverviewRow label="Farm Members" value={members.length} />
+            </>
+          )}
+        </View>
+      </ScrollView>
+
+      <BottomNavigation navigation={navigation} active="Home" />
+    </View>
+  );
+}
+
+function ManagementAction({icon, title, description, color, onPress}) {
+  return (
+    <TouchableOpacity
+      activeOpacity={0.8}
+      style={styles.actionCard}
+      onPress={onPress}>
+      <View style={[styles.actionIcon, {backgroundColor: `${color}15`}]}>
+        <MaterialIcons name={icon} size={27} color={color} />
       </View>
-
-      <View style={styles.quickActionsGrid}>
-        {quickActions.map(action => (
-          <TouchableOpacity
-            key={action.title}
-            accessibilityRole="button"
-            activeOpacity={0.85}
-            onPress={action.onPress}
-            style={styles.quickAction}>
-            <View style={styles.actionIconWrap}>
-              <MaterialIcons name={action.icon} size={22} color="#176B4B" />
-            </View>
-            <Text style={styles.actionTitle}>{action.title}</Text>
-            <Text style={styles.actionSubtitle}>{action.subtitle}</Text>
-          </TouchableOpacity>
-        ))}
+      <View style={{flex: 1}}>
+        <Text style={styles.actionTitle}>{title}</Text>
+        <Text style={styles.actionDescription}>{description}</Text>
       </View>
+      <MaterialIcons name="chevron-right" size={23} color={MUTED} />
+    </TouchableOpacity>
+  );
+}
 
-      <View style={styles.activityCard}>
-        <Text style={styles.sectionTitle}>Recent Activity</Text>
+function SmallAction({icon, title, onPress}) {
+  return (
+    <TouchableOpacity style={styles.smallAction} onPress={onPress}>
+      <MaterialIcons name={icon} size={25} color={GREEN} />
+      <Text style={styles.smallActionText}>{title}</Text>
+    </TouchableOpacity>
+  );
+}
 
-        {recentActivity.map(item => (
-          <View key={`${item.title}-${item.detail}`} style={styles.activityItem}>
-            <Text style={styles.activityIcon}>{item.icon}</Text>
-            <View style={styles.activityCopy}>
-              <Text style={styles.activityTitle}>{item.title}</Text>
-              <Text style={styles.activityDetail}>{item.detail}</Text>
-            </View>
-          </View>
-        ))}
-      </View>
+function OverviewRow({label, value}) {
+  return (
+    <View style={styles.overviewRow}>
+      <Text style={styles.overviewLabel}>{label}</Text>
+      <Text style={styles.overviewValue}>{value}</Text>
+    </View>
+  );
+}
 
-      {loading ? (
-        <Text style={styles.loadingText}>Loading farm summary...</Text>
-      ) : null}
-
-      {!loading && sheep.length === 0 && flocks.length === 0 ? (
-        <EmptyState
-          title="No activity yet"
-          message="Add a flock and register the first sheep to get a full farm view."
-          action={
-            <AppButton
-              title="Add Flock"
-              onPress={() => navigation.navigate('AddFlock', {farmId: farm?.farm_id})}
+function BottomNavigation({navigation, active}) {
+  return (
+    <View style={styles.bottomNav}>
+      {NAV_ITEMS.map(item => (
+        <TouchableOpacity
+          key={item.label}
+          style={styles.navItem}
+          onPress={() => navigation.navigate(item.route)}>
+          <View
+            style={[
+              styles.navIcon,
+              active === item.label && styles.navIconActive,
+              item.label === 'Scan' && styles.scanIcon,
+            ]}>
+            <MaterialIcons
+              name={item.icon}
+              size={item.label === 'Scan' ? 24 : 22}
+              color={
+                item.label === 'Scan'
+                  ? '#FFFFFF'
+                  : active === item.label
+                  ? GREEN
+                  : '#829087'
+              }
             />
-          }
-        />
-      ) : null}
-    </ScrollView>
+          </View>
+          <Text
+            style={[
+              styles.navLabel,
+              active === item.label && styles.navLabelActive,
+            ]}>
+            {item.label}
+          </Text>
+        </TouchableOpacity>
+      ))}
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  screen: {
-    flex: 1,
-    backgroundColor: '#F4FBF7',
+  screen: {flex: 1, backgroundColor: '#F4F7F2'},
+  dashboardContent: {paddingBottom: 20},
+  hero: {
+    backgroundColor: DARK,
+    padding: 22,
+    paddingTop: 17,
+    borderBottomLeftRadius: 27,
+    borderBottomRightRadius: 27,
   },
-  content: {
-    paddingHorizontal: 18,
-    paddingTop: 22,
-    paddingBottom: 26,
-  },
-  headerRow: {
+  heroTop: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 18,
+    marginBottom: 20,
   },
-  headerInfo: {
-    flex: 1,
+  brandIcon: {
+    width: 43,
+    height: 43,
+    borderRadius: 14,
+    backgroundColor: '#2B6048',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  refreshButton: {
+    padding: 10,
+    backgroundColor: '#2B6048',
+    borderRadius: 13,
   },
   eyebrow: {
-    color: '#0F8A5F',
-    fontSize: 11,
-    fontWeight: '700',
-    letterSpacing: 1,
-    textTransform: 'uppercase',
-    marginBottom: 4,
+    color: '#B7D9C4',
+    fontSize: 10,
+    fontWeight: '800',
+    letterSpacing: 1.5,
   },
   farmName: {
-    fontSize: 24,
+    color: '#FFFFFF',
+    fontSize: 26,
     fontWeight: '800',
-    color: '#0F2E24',
+    marginTop: 8,
   },
-  locationText: {
-    color: '#587268',
-    fontSize: 13,
-    marginTop: 4,
-  },
-  settingsButton: {
-    width: 42,
-    height: 42,
-    borderRadius: 12,
-    backgroundColor: '#EAF8F1',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  summaryGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    justifyContent: 'space-between',
-    marginBottom: 16,
-  },
-  summaryCard: {
-    width: '48%',
-    backgroundColor: '#fff',
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: '#E4F2EA',
-    padding: 12,
-    marginBottom: 10,
-  },
-  summaryIcon: {
-    fontSize: 18,
-    marginBottom: 6,
-  },
-  summaryValue: {
-    fontSize: 22,
-    fontWeight: '800',
-    color: '#0F2E24',
-  },
-  summaryLabel: {
-    color: '#4F635F',
-    fontSize: 11,
-    marginTop: 4,
-  },
-  financePanel: {
-    backgroundColor: '#fff',
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: '#E4F2EA',
-    padding: 14,
-    marginBottom: 18,
-  },
-  financeHeaderRow: {
+  heroSubtitle: {color: '#D0E8D9', fontSize: 13, marginTop: 5},
+  heroCount: {
+    marginTop: 24,
+    paddingTop: 17,
+    borderTopWidth: 1,
+    borderTopColor: '#355846',
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 10,
   },
-  sectionTitle: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: '#112922',
+  heroCountLabel: {color: '#B7D9C4', fontSize: 10, fontWeight: '700'},
+  heroCountValue: {
+    color: '#FFFFFF',
+    fontSize: 25,
+    fontWeight: '800',
+    marginTop: 5,
   },
-  balanceBadge: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: '#0F8A5F',
-    textTransform: 'uppercase',
-  },
-  financeColumns: {
+  stats: {
     flexDirection: 'row',
+    marginHorizontal: 14,
+    marginTop: 17,
     gap: 8,
   },
-  financeColumn: {
+  statCard: {
     flex: 1,
-    backgroundColor: '#F6FBF8',
-    borderRadius: 12,
-    padding: 10,
-  },
-  financeColumnAccent: {
-    flex: 1,
-    backgroundColor: '#EAF8F1',
-    borderRadius: 12,
-    padding: 10,
-  },
-  financeLabel: {
-    fontSize: 11,
-    color: '#587268',
-    marginBottom: 4,
-  },
-  financeValue: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: '#0F2E24',
-  },
-  quickActionsGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    justifyContent: 'space-between',
-    marginBottom: 18,
-  },
-  quickAction: {
-    width: '32%',
-    backgroundColor: '#fff',
-    borderRadius: 16,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 15,
+    padding: 12,
     borderWidth: 1,
-    borderColor: '#E4F2EA',
-    paddingVertical: 14,
-    paddingHorizontal: 8,
-    alignItems: 'center',
-    marginBottom: 10,
+    borderColor: '#E8EEE8',
   },
-  actionIconWrap: {
-    width: 40,
-    height: 40,
-    borderRadius: 12,
-    backgroundColor: '#EAF8F1',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 10,
-  },
-  actionTitle: {
-    fontSize: 13,
-    fontWeight: '700',
-    color: '#112922',
-    textAlign: 'center',
-  },
-  actionSubtitle: {
-    fontSize: 10,
-    color: '#587268',
-    marginTop: 2,
-    textTransform: 'uppercase',
-    letterSpacing: 0.25,
-  },
-  activityCard: {
-    backgroundColor: '#fff',
+  statValue: {fontSize: 22, fontWeight: '800', color: DARK, marginTop: 8},
+  statLabel: {fontSize: 10, color: MUTED, marginTop: 4},
+  sectionHeader: {marginHorizontal: 18, marginTop: 24, marginBottom: 12},
+  sectionTitle: {fontSize: 17, fontWeight: '800', color: DARK},
+  managementButton: {
+    marginHorizontal: 16,
+    backgroundColor: '#FFFFFF',
     borderRadius: 18,
-    borderWidth: 1,
-    borderColor: '#E4F2EA',
-    padding: 16,
-  },
-  activityItem: {
+    padding: 15,
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 8,
-    borderBottomWidth: 1,
-    borderBottomColor: '#EEF7F1',
+    borderWidth: 1,
+    borderColor: '#D9E8DC',
   },
-  activityIcon: {
-    fontSize: 19,
+  managementButtonIcon: {
+    width: 49,
+    height: 49,
+    borderRadius: 15,
+    backgroundColor: '#E8F4EC',
+    alignItems: 'center',
+    justifyContent: 'center',
     marginRight: 12,
   },
-  activityCopy: {
-    flex: 1,
-  },
-  activityTitle: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: '#102821',
-  },
-  activityDetail: {
+  managementButtonTitle: {fontSize: 15, fontWeight: '800', color: DARK},
+  managementButtonSubtitle: {
     fontSize: 11,
-    color: '#587268',
-    marginTop: 2,
+    lineHeight: 16,
+    color: MUTED,
+    marginTop: 5,
   },
-  loadingText: {
-    color: '#4F635F',
-    marginTop: 12,
+  actionsGrid: {
+    marginHorizontal: 16,
+    marginTop: 10,
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10,
   },
+  smallAction: {
+    width: '48%',
+    flexGrow: 1,
+    minHeight: 83,
+    padding: 14,
+    borderRadius: 15,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#E8EEE8',
+    justifyContent: 'center',
+  },
+  smallActionText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: DARK,
+    marginTop: 8,
+  },
+  overviewCard: {
+    marginHorizontal: 16,
+    padding: 16,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 17,
+    borderWidth: 1,
+    borderColor: '#E8EEE8',
+  },
+  overviewRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingVertical: 11,
+    borderBottomWidth: 1,
+    borderBottomColor: '#EEF2EE',
+  },
+  overviewLabel: {fontSize: 12, color: MUTED},
+  overviewValue: {fontSize: 13, fontWeight: '800', color: DARK},
+  errorText: {fontSize: 12, color: '#B93838'},
+  managementHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 19,
+    paddingTop: 16,
+  },
+  backButton: {
+    width: 43,
+    height: 43,
+    borderRadius: 13,
+    backgroundColor: '#FFFFFF',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  managementTitle: {fontSize: 20, fontWeight: '800', color: DARK},
+  muted: {fontSize: 12, color: MUTED, marginTop: 4},
+  managementContent: {padding: 17, paddingBottom: 25},
+  managementBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 18,
+    borderRadius: 19,
+    backgroundColor: GREEN,
+    marginBottom: 25,
+  },
+  bannerTitle: {fontSize: 17, fontWeight: '800', color: '#FFFFFF'},
+  bannerSubtitle: {fontSize: 12, color: '#E0F0E5', marginTop: 5},
+  actionCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+    padding: 14,
+    borderRadius: 16,
+    marginBottom: 11,
+    borderWidth: 1,
+    borderColor: '#E7EDE6',
+    gap: 12,
+  },
+  actionIcon: {
+    width: 47,
+    height: 47,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  actionTitle: {fontSize: 14, fontWeight: '800', color: DARK},
+  actionDescription: {
+    fontSize: 11,
+    color: MUTED,
+    marginTop: 5,
+    lineHeight: 16,
+  },
+  note: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    padding: 13,
+    backgroundColor: '#E8F4EC',
+    borderRadius: 13,
+    marginTop: 8,
+    gap: 9,
+  },
+  noteText: {flex: 1, fontSize: 11, color: DARK, lineHeight: 17},
+  bottomNav: {
+    flexDirection: 'row',
+    backgroundColor: '#FFFFFF',
+    borderTopWidth: 1,
+    borderTopColor: '#E7ECE7',
+    paddingTop: 8,
+    paddingBottom: 7,
+  },
+  navItem: {flex: 1, alignItems: 'center'},
+  navIcon: {
+    width: 38,
+    height: 31,
+    borderRadius: 11,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  navIconActive: {backgroundColor: '#E8F4EC'},
+  scanIcon: {
+    width: 45,
+    height: 41,
+    marginTop: -15,
+    backgroundColor: GREEN,
+    borderRadius: 14,
+  },
+  navLabel: {fontSize: 9, color: '#829087', marginTop: 3},
+  navLabelActive: {fontWeight: '800', color: GREEN},
 });

@@ -1,4 +1,4 @@
-import React, {useEffect, useState} from 'react';
+import {useEffect, useState} from 'react';
 import {NavigationContainer} from '@react-navigation/native';
 
 import {getSession, subscribeToAuthChanges} from '../services/authService';
@@ -10,57 +10,54 @@ const SPLASH_DURATION = 1600;
 
 export default function RootNavigator() {
   const [session, setSession] = useState(null);
-  const [bootstrapping, setBootstrapping] = useState(true);
-  const [splashElapsed, setSplashElapsed] = useState(false);
+  const [isInitializing, setIsInitializing] = useState(true);
+  const [showSplash, setShowSplash] = useState(true);
 
   useEffect(() => {
-    let isMounted = true;
+    let isActive = true;
 
-    const handleAuthChange = nextSession => {
-      if (isMounted) {
-        setSession(nextSession);
-      }
-    };
-
-    const bootstrapSession = async () => {
+    const initializeSession = async () => {
       try {
-        const initialSession = await getSession();
+        const currentSession = await getSession();
 
-        if (isMounted) {
-          setSession(initialSession);
+        if (isActive) {
+          setSession(currentSession);
         }
       } catch (error) {
-        console.warn('Session bootstrap failed', error);
+        console.warn('Failed to initialize session:', error);
 
-        if (isMounted) {
+        if (isActive) {
           setSession(null);
         }
       } finally {
-        if (isMounted) {
-          setBootstrapping(false);
+        if (isActive) {
+          setIsInitializing(false);
         }
       }
     };
 
-    const splashTimer = setTimeout(
-      () => setSplashElapsed(true),
-      SPLASH_DURATION,
-    );
+    const unsubscribe = subscribeToAuthChanges(nextSession => {
+      if (isActive) {
+        setSession(nextSession);
+      }
+    });
 
-    const unsubscribe = subscribeToAuthChanges(handleAuthChange);
+    const splashTimer = setTimeout(() => {
+      if (isActive) {
+        setShowSplash(false);
+      }
+    }, SPLASH_DURATION);
 
-    bootstrapSession();
+    initializeSession();
 
     return () => {
-      isMounted = false;
+      isActive = false;
       clearTimeout(splashTimer);
       unsubscribe();
     };
   }, []);
 
-  const isLoading = bootstrapping || !splashElapsed;
-
-  if (isLoading) {
+  if (isInitializing || showSplash) {
     return <SplashScreen />;
   }
 

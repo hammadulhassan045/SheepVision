@@ -1,12 +1,14 @@
-import React from 'react';
+import {Pressable, StyleSheet, Text, View} from 'react-native';
 import {createBottomTabNavigator} from '@react-navigation/bottom-tabs';
 import {createNativeStackNavigator} from '@react-navigation/native-stack';
-import {MaterialIcons} from '@expo/vector-icons';
+import {MaterialIcons, MaterialCommunityIcons} from '@expo/vector-icons';
+
 import DashboardScreen from '../screens/DashboardScreen';
 import SheepListScreen from '../screens/SheepListScreen';
 import QRScannerScreen from '../screens/QRScannerScreen';
 import RecordsScreen from '../screens/RecordsScreen';
 import ProfileScreen from '../screens/ProfileScreen';
+
 import AddFarmScreen from '../screens/AddFarmScreen';
 import FarmDashboardScreen from '../screens/FarmDashboardScreen';
 import AddFlockScreen from '../screens/AddFlockScreen';
@@ -20,67 +22,81 @@ import ReportsScreen from '../screens/ReportsScreen';
 const Tab = createBottomTabNavigator();
 const Stack = createNativeStackNavigator();
 
+const tabs = [
+  {name: 'Home', component: DashboardScreen, icon: 'home'},
+  {name: 'Sheep', component: SheepListScreen, icon: 'sheep'},
+  {name: 'Records', component: RecordsScreen, icon: 'folder-open'},
+  {name: 'More', component: ProfileScreen, icon: 'menu'},
+];
+
+function ScanPlaceholder() {
+  return null;
+}
+
 function MainTabs() {
   return (
     <Tab.Navigator
-      screenOptions={({route}) => ({
-        tabBarIcon: ({focused, color, size}) => {
-          let iconName = 'home';
-
-          if (route.name === 'Dashboard') iconName = 'home';
-          if (route.name === 'Sheep') iconName = 'pets';
-          if (route.name === 'Finance') iconName = 'account-balance-wallet';
-          if (route.name === 'Reports') iconName = 'bar-chart';
-          if (route.name === 'More') iconName = 'menu';
-
-          return <MaterialIcons name={iconName} size={size} color={color} />;
-        },
-        tabBarActiveTintColor: '#0F8A5F',
-        tabBarInactiveTintColor: '#71827B',
+      screenOptions={({route, navigation}) => ({
         headerShown: false,
-        tabBarStyle: {
-          height: 64,
-          paddingBottom: 8,
-          paddingTop: 8,
-          backgroundColor: '#fff',
-          borderTopColor: '#E7F0EA',
-        },
+        tabBarActiveTintColor: '#16845B',
+        tabBarInactiveTintColor: '#83918A',
+
+        // Hide the bottom navigation on the farm-selection dashboard.
+        tabBarStyle: route.name === 'Home' ? {display: 'none'} : styles.tabBar,
+
+        tabBarIcon: ({color, size}) =>
+          route.name === 'Sheep' ? (
+            <MaterialCommunityIcons
+              name="sheep"
+              size={size + 2}
+              color={color}
+            />
+          ) : (
+            <MaterialIcons
+              name={tabs.find(tab => tab.name === route.name)?.icon || 'menu'}
+              size={size}
+              color={color}
+            />
+          ),
+
+        ...(route.name === 'Scan' && {
+          tabBarLabel: () => null,
+          tabBarButton: () => (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Scan sheep QR code"
+              onPress={() => navigation.getParent()?.navigate('QRScanner')}
+              style={styles.scanWrapper}>
+              <View style={styles.scanButton}>
+                <MaterialCommunityIcons
+                  name="qrcode-scan"
+                  size={27}
+                  color="#FFFFFF"
+                />
+              </View>
+              <Text style={styles.scanLabel}>Scan</Text>
+            </Pressable>
+          ),
+        }),
       })}>
-      <Tab.Screen
-        name="Dashboard"
-        component={DashboardScreen}
-        options={{title: 'Home'}}
-      />
-      <Tab.Screen
-        name="Sheep"
-        component={SheepListScreen}
-        options={{title: 'Sheep'}}
-      />
-      <Tab.Screen
-        name="Finance"
-        component={FinanceScreen}
-        options={{title: 'Finance'}}
-      />
-      <Tab.Screen
-        name="Reports"
-        component={ReportsScreen}
-        options={{title: 'Reports'}}
-      />
-      <Tab.Screen
-        name="More"
-        component={ProfileScreen}
-        options={{title: 'More'}}
-      />
+      {tabs.slice(0, 2).map(tab => (
+        <Tab.Screen key={tab.name} name={tab.name} component={tab.component} />
+      ))}
+
+      <Tab.Screen name="Scan" component={ScanPlaceholder} />
+
+      {tabs.slice(2).map(tab => (
+        <Tab.Screen key={tab.name} name={tab.name} component={tab.component} />
+      ))}
     </Tab.Navigator>
   );
 }
 
-export default function MainNavigator({initialRouteName = 'MainTabs'}) {
+export default function MainNavigator() {
   return (
-    <Stack.Navigator
-      initialRouteName={initialRouteName}
-      screenOptions={{headerShown: false}}>
+    <Stack.Navigator screenOptions={{headerShown: false}}>
       <Stack.Screen name="MainTabs" component={MainTabs} />
+      <Stack.Screen name="QRScanner" component={QRScannerScreen} />
       <Stack.Screen name="AddFarm" component={AddFarmScreen} />
       <Stack.Screen name="FarmDashboard" component={FarmDashboardScreen} />
       <Stack.Screen name="AddFlock" component={AddFlockScreen} />
@@ -93,8 +109,38 @@ export default function MainNavigator({initialRouteName = 'MainTabs'}) {
       />
       <Stack.Screen name="Finance" component={FinanceScreen} />
       <Stack.Screen name="Reports" component={ReportsScreen} />
-      <Stack.Screen name="Scan" component={QRScannerScreen} />
-      <Stack.Screen name="Records" component={RecordsScreen} />
     </Stack.Navigator>
   );
 }
+
+const styles = StyleSheet.create({
+  tabBar: {
+    height: 68,
+    paddingTop: 6,
+    paddingBottom: 6,
+    backgroundColor: '#FFFFFF',
+    borderTopColor: '#E7EEE9',
+  },
+  scanWrapper: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: -20,
+  },
+  scanButton: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: '#16845B',
+    borderWidth: 3,
+    borderColor: '#FFFFFF',
+    alignItems: 'center',
+    justifyContent: 'center',
+    elevation: 5,
+  },
+  scanLabel: {
+    fontSize: 10,
+    color: '#16845B',
+    fontWeight: '600',
+  },
+});

@@ -1,26 +1,29 @@
 import React from 'react';
 import {StyleSheet, Text, TouchableOpacity, View} from 'react-native';
-import {MaterialIcons} from '@expo/vector-icons';
+import {MaterialCommunityIcons, MaterialIcons} from '@expo/vector-icons';
 
 export default function AuthBrandHeader({navigation, showBack = false}) {
   return (
-    <View style={styles.row}>
+    <View style={styles.container}>
       <View style={styles.brandLockup}>
-        <View style={styles.mark}>
-          <MaterialIcons name="pets" size={22} color="#FFFFFF" />
+        <View style={styles.logo}>
+          <MaterialCommunityIcons name="sheep" size={29} color="#FFFFFF" />
         </View>
-        <View>
-          <Text style={styles.brand}>SheepVision</Text>
-          <Text style={styles.identity}>SMART SHEEP FARMING</Text>
+
+        <View style={styles.brandText}>
+          <Text style={styles.brandName}>SheepVision</Text>
+          <Text style={styles.tagline}>SMART SHEEP FARMING</Text>
         </View>
       </View>
-      {showBack ? (
+
+      {showBack && navigation ? (
         <TouchableOpacity
           accessibilityRole="button"
           accessibilityLabel="Go back"
           onPress={() => navigation.goBack()}
+          activeOpacity={0.75}
           style={styles.backButton}>
-          <MaterialIcons name="arrow-back" size={22} color="#183D2F" />
+          <MaterialIcons name="arrow-back" size={21} color="#174B36" />
         </TouchableOpacity>
       ) : null}
     </View>
@@ -28,43 +31,53 @@ export default function AuthBrandHeader({navigation, showBack = false}) {
 }
 
 const styles = StyleSheet.create({
-  row: {
-    minHeight: 48,
+  container: {
+    minHeight: 54,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: 28,
+    marginBottom: 22,
   },
   brandLockup: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
+    gap: 11,
   },
-  mark: {
-    width: 42,
-    height: 42,
+  logo: {
+    width: 48,
+    height: 48,
+    borderRadius: 16,
+    backgroundColor: '#176B4B',
     alignItems: 'center',
     justifyContent: 'center',
-    borderRadius: 14,
-    backgroundColor: '#176B4B',
+    shadowColor: '#176B4B',
+    shadowOffset: {width: 0, height: 4},
+    shadowOpacity: 0.16,
+    shadowRadius: 7,
+    elevation: 3,
   },
-  brand: {
-    color: '#163A2D',
-    fontSize: 18,
+  brandText: {
+    justifyContent: 'center',
+  },
+  brandName: {
+    color: '#173D2D',
+    fontSize: 21,
     fontWeight: '800',
+    letterSpacing: -0.5,
   },
-  identity: {
-    color: '#648074',
+  tagline: {
+    color: '#648170',
     fontSize: 9,
-    fontWeight: '700',
-    marginTop: 2,
+    fontWeight: '800',
+    letterSpacing: 1.5,
+    marginTop: 4,
   },
   backButton: {
     width: 42,
     height: 42,
+    borderRadius: 14,
+    backgroundColor: '#E7F1E9',
     alignItems: 'center',
     justifyContent: 'center',
-    borderRadius: 14,
-    backgroundColor: '#E6F1E9',
   },
 });

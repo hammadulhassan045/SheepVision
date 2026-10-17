@@ -1,262 +1,385 @@
 ﻿import React, {useCallback, useState} from 'react';
 import {
   ActivityIndicator,
+  Image,
   ScrollView,
   StyleSheet,
   Text,
+  TouchableOpacity,
   View,
 } from 'react-native';
 import {useFocusEffect} from '@react-navigation/native';
+import {MaterialCommunityIcons, MaterialIcons} from '@expo/vector-icons';
+
+import AuthBrandHeader from '../components/AuthBrandHeader';
 import AppButton from '../components/AppButton';
 import {getSession} from '../services/authService';
 import {getFarmsForUser} from '../services/farmService';
 import {fetchSheepByFarm} from '../services/sheepService';
-import FarmCard from '../components/FarmCard';
+
+const C = {
+  green: '#176B4B',
+  dark: '#183B2C',
+  muted: '#7A897E',
+  bg: '#F4F7F2',
+  pale: '#E8F2E7',
+  white: '#FFFFFF',
+  border: '#E3EAE1',
+};
 
 export default function DashboardScreen({navigation}) {
   const [farms, setFarms] = useState([]);
+  const [counts, setCounts] = useState({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [sheepCounts, setSheepCounts] = useState({});
-  const [accessMode, setAccessMode] = useState('standard');
-  const [reloadKey, setReloadKey] = useState(0);
+  const [limited, setLimited] = useState(false);
+  const [reload, setReload] = useState(0);
 
   useFocusEffect(
     useCallback(() => {
-      let isActive = true;
+      let active = true;
 
-      const loadFarms = async () => {
+      async function load() {
         setLoading(true);
         setError('');
-        try {
-          const session = await getSession();
-          if (!session?.user_id) {
-            throw new Error(
-              'Your session is no longer active. Please log in again.',
-            );
-          }
 
-          const userFarms = await getFarmsForUser(session.user_id);
-          const countEntries = await Promise.all(
-            userFarms.map(async farm => {
+        try {
+          const user = await getSession();
+          if (!user?.user_id) throw new Error('Please log in again.');
+
+          const data = await getFarmsForUser(user.user_id);
+          const results = await Promise.all(
+            data.map(async farm => {
               try {
-                const sheep = await fetchSheepByFarm(farm.farm_id);
-                return [farm.farm_id, sheep.length];
-              } catch (countError) {
-                console.warn('Unable to load farm sheep count', countError);
+                return [
+                  farm.farm_id,
+                  (await fetchSheepByFarm(farm.farm_id)).length,
+                ];
+              } catch {
                 return [farm.farm_id, null];
               }
             }),
           );
 
-          if (isActive) {
-            setFarms(userFarms);
-            setSheepCounts(Object.fromEntries(countEntries));
+          if (active) {
+            setFarms(data);
+            setCounts(Object.fromEntries(results));
           }
-        } catch (loadError) {
-          console.warn('Unable to load dashboard state', loadError);
-          if (isActive) {
-            setError(loadError?.message || 'Unable to load your farms.');
-          }
+        } catch (e) {
+          if (active) setError(e.message || 'Unable to load farms.');
         } finally {
-          if (isActive) {
-            setLoading(false);
-          }
+          if (active) setLoading(false);
         }
-      };
+      }
 
-      loadFarms();
+      load();
       return () => {
-        isActive = false;
+        active = false;
       };
-      // Changing reloadKey re-runs the fetch while this tab is focused.
-      // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [reloadKey]),
+    }, [reload]),
   );
 
+  const openFarm = farm => navigation.navigate('FarmDashboard', {farm});
+  const addFarm = () => navigation.navigate('AddFarm');
+
   return (
-    <ScrollView style={styles.screen} contentContainerStyle={styles.content}>
+    <ScrollView
+      style={s.screen}
+      contentContainerStyle={s.content}
+      showsVerticalScrollIndicator={false}>
+      <AuthBrandHeader navigation={navigation} />
+
+      <View style={s.hero}>
+        <Text style={s.eyebrow}>YOUR WORKSPACE</Text>
+        <Text style={s.title}>Welcome to your farm.</Text>
+        <Text style={s.subtitle}>
+          Select a farm to manage your sheep, health records and daily activity.
+        </Text>
+
+        <View style={s.heroImage}>
+          <Image
+            source={require('../../assets/Farm.png')}
+            style={s.image}
+            resizeMode="cover"
+          />
+        </View>
+      </View>
+
+      <View style={s.sectionHeader}>
+        <View>
+          <Text style={s.sectionTitle}>Your farms</Text>
+          <Text style={s.sectionSub}>Choose where to get started</Text>
+        </View>
+
+        {!!farms.length && (
+          <View style={s.countBadge}>
+            <Text style={s.countBadgeText}>{farms.length}</Text>
+          </View>
+        )}
+      </View>
+
       {loading ? (
-        <View style={styles.stateContainer}>
-          <ActivityIndicator size="large" color="#176B4B" />
-          <Text style={styles.loading}>Loading your farms...</Text>
+        <View style={s.state}>
+          <ActivityIndicator size="large" color={C.green} />
+          <Text style={s.muted}>Loading your farms...</Text>
         </View>
       ) : error ? (
-        <View style={styles.stateContainer}>
-          <Text style={styles.title}>Your farms could not be loaded</Text>
-          <Text style={styles.heroText}>{error}</Text>
-          <AppButton
-            title="Try Again"
-            onPress={() => setReloadKey(key => key + 1)}
+        <View style={s.card}>
+          <MaterialCommunityIcons
+            name="cloud-alert"
+            size={32}
+            color="#B74743"
           />
+          <Text style={s.farmTitle}>Couldn't load farms</Text>
+          <Text style={s.muted}>{error}</Text>
+          <AppButton title="Try Again" onPress={() => setReload(v => v + 1)} />
         </View>
-      ) : farms.length > 0 ? (
+      ) : farms.length ? (
         <>
-          <Text style={styles.eyebrow}>SHEEPVISION</Text>
-          <Text style={styles.title}>Welcome back!</Text>
-          <Text style={styles.subtitle}>Manage your farms from one place.</Text>
-
-          <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Your Farms</Text>
-            <Text style={styles.farmCount}>{farms.length}</Text>
-          </View>
-
           {farms.map(farm => (
-            <FarmCard
+            <TouchableOpacity
               key={farm.farm_id}
-              farm={farm}
-              sheepCount={sheepCounts[farm.farm_id]}
-              onPress={() => navigation.navigate('FarmDashboard', {farm})}
-            />
+              style={s.farmCard}
+              activeOpacity={0.8}
+              onPress={() => openFarm(farm)}>
+              <View style={s.farmIcon}>
+                <MaterialCommunityIcons name="barn" size={30} color={C.green} />
+              </View>
+
+              <View style={{flex: 1}}>
+                <Text style={s.farmTitle} numberOfLines={1}>
+                  {farm.farm_name || farm.name || farm.farmName || 'My Farm'}
+                </Text>
+
+                <Text style={s.muted} numberOfLines={1}>
+                  {farm.location || farm.address || 'Your farm space'}
+                </Text>
+
+                <View style={s.sheepRow}>
+                  <MaterialCommunityIcons
+                    name="sheep"
+                    size={16}
+                    color={C.green}
+                  />
+                  <Text style={s.sheepText}>
+                    {counts[farm.farm_id] == null
+                      ? 'Sheep count unavailable'
+                      : `${counts[farm.farm_id]} sheep`}
+                  </Text>
+                </View>
+              </View>
+
+              <MaterialIcons
+                name="arrow-forward-ios"
+                size={17}
+                color={C.green}
+              />
+            </TouchableOpacity>
           ))}
 
-          <AppButton
-            title="+ Add Another Farm"
-            onPress={() => navigation.navigate('AddFarm')}
-            variant="secondary"
-            textStyle={styles.secondaryButtonText}
-            style={styles.addFarmButton}
-          />
+          <TouchableOpacity
+            style={s.addCard}
+            onPress={addFarm}
+            activeOpacity={0.8}>
+            <MaterialIcons
+              name="add-circle-outline"
+              size={25}
+              color={C.green}
+            />
+            <Text style={s.addText}>Add another farm</Text>
+            <MaterialIcons name="chevron-right" size={24} color={C.green} />
+          </TouchableOpacity>
         </>
-      ) : accessMode === 'limited' ? (
-        <View style={styles.limitedState}>
-          <Text style={styles.eyebrow}>LIMITED ACCESS</Text>
-          <Text style={styles.title}>You can explore SheepVision</Text>
-          <Text style={styles.heroText}>
-            Add a farm whenever you are ready to manage your flock and farm
-            activities.
-          </Text>
-          <AppButton
-            title="+ Create Farm"
-            onPress={() => navigation.navigate('AddFarm')}
-          />
-        </View>
       ) : (
-        <>
-          <Text style={styles.eyebrow}>WELCOME</Text>
-          <Text style={styles.title}>Welcome to SheepVision</Text>
-
-          <View style={styles.heroCard}>
-            <Text style={styles.heroTitle}>Farm management starts here.</Text>
-            <Text style={styles.heroText}>
-              Create your first farm to start managing your sheep, records and
-              farm activities.
-            </Text>
-            <AppButton
-              title="+ Create Farm"
-              onPress={() => navigation.navigate('AddFarm')}
-            />
-            <AppButton
-              title="Skip for Now"
-              onPress={() => setAccessMode('limited')}
-              variant="secondary"
-              textStyle={styles.secondaryButtonText}
-              style={styles.secondaryButton}
-            />
+        <View style={s.emptyCard}>
+          <View style={s.emptyIcon}>
+            <MaterialCommunityIcons name="barn" size={48} color={C.green} />
           </View>
-        </>
+
+          <Text style={s.emptyTitle}>
+            {limited ? 'Your workspace is ready' : 'Start with your first farm'}
+          </Text>
+
+          <Text style={s.emptyText}>
+            Create a farm to organize your flock and keep all your records in
+            one place.
+          </Text>
+
+          <AppButton title="Create Your First Farm" onPress={addFarm} />
+
+          {!limited && (
+            <TouchableOpacity style={s.skip} onPress={() => setLimited(true)}>
+              <Text style={s.skipText}>Skip for now</Text>
+            </TouchableOpacity>
+          )}
+        </View>
       )}
+
+      <Text style={s.footer}>BETTER RECORDS. HEALTHIER FLOCKS.</Text>
     </ScrollView>
   );
 }
 
-const styles = StyleSheet.create({
-  screen: {
-    flex: 1,
-    backgroundColor: '#F4FBF7',
-  },
-  content: {
-    paddingHorizontal: 20,
-    paddingTop: 32,
-    paddingBottom: 30,
+const s = StyleSheet.create({
+  screen: {flex: 1, backgroundColor: C.bg},
+  content: {padding: 20, paddingBottom: 35},
+
+  hero: {
+    backgroundColor: C.white,
+    borderRadius: 24,
+    padding: 20,
+    borderWidth: 1,
+    borderColor: C.border,
+    marginTop: 24,
+    marginBottom: 28,
   },
   eyebrow: {
-    color: '#0F8A5F',
-    fontSize: 11,
-    fontWeight: '700',
-    textTransform: 'uppercase',
-    letterSpacing: 1,
-    marginBottom: 8,
+    fontSize: 10,
+    fontWeight: '800',
+    letterSpacing: 1.4,
+    color: C.green,
   },
   title: {
-    fontSize: 28,
+    fontSize: 27,
+    lineHeight: 34,
     fontWeight: '800',
-    color: '#0F2E24',
-    marginBottom: 6,
+    color: C.dark,
+    marginTop: 9,
   },
   subtitle: {
-    color: '#587268',
-    fontSize: 15,
-    marginBottom: 26,
-    lineHeight: 22,
+    fontSize: 13,
+    lineHeight: 20,
+    color: C.muted,
+    marginTop: 8,
   },
-  heroCard: {
-    backgroundColor: '#fff',
-    borderRadius: 18,
-    padding: 22,
-    borderWidth: 1,
-    borderColor: '#E4F2EA',
-    marginTop: 12,
+  heroImage: {
+    height: 155,
+    marginTop: 17,
+    borderRadius: 17,
+    overflow: 'hidden',
+    backgroundColor: C.pale,
   },
-  heroTitle: {
-    fontSize: 20,
-    fontWeight: '700',
-    color: '#102821',
-    marginBottom: 8,
+  image: {
+    width: '100%',
+    height: '100%',
   },
-  heroText: {
-    fontSize: 14,
-    color: '#587268',
-    marginBottom: 16,
-    lineHeight: 22,
-  },
-  secondaryButton: {
-    marginTop: 12,
-    backgroundColor: '#EAF8F1',
-  },
-  secondaryButtonText: {
-    color: '#0F8A5F',
-  },
+
   sectionHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 14,
+    justifyContent: 'space-between',
+    marginBottom: 15,
   },
-  sectionTitle: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: '#112922',
-    flex: 1,
-  },
-  farmCount: {
-    color: '#507166',
-    fontSize: 13,
-    fontWeight: '700',
-    backgroundColor: '#E8F7F0',
-    overflow: 'hidden',
-    borderRadius: 12,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-  },
-  loading: {
-    color: '#4F635F',
-    marginTop: 12,
-  },
-  stateContainer: {
-    flex: 1,
-    minHeight: 300,
+  sectionTitle: {fontSize: 19, fontWeight: '800', color: C.dark},
+  sectionSub: {fontSize: 12, color: C.muted, marginTop: 4},
+  countBadge: {
+    minWidth: 32,
+    height: 32,
+    paddingHorizontal: 8,
+    borderRadius: 11,
+    backgroundColor: C.pale,
+    alignItems: 'center',
     justifyContent: 'center',
   },
-  limitedState: {
-    backgroundColor: '#fff',
-    borderRadius: 18,
-    padding: 22,
-    borderWidth: 1,
-    borderColor: '#E4F2EA',
-    marginTop: 12,
-  },
-  addFarmButton: {
-    marginTop: 8,
+  countBadgeText: {fontWeight: '800', color: C.green},
+
+  farmCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 13,
+    padding: 15,
     marginBottom: 12,
+    backgroundColor: C.white,
+    borderRadius: 19,
+    borderWidth: 1,
+    borderColor: C.border,
+  },
+  farmIcon: {
+    width: 58,
+    height: 62,
+    borderRadius: 15,
+    backgroundColor: C.pale,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  farmTitle: {
+    fontSize: 15,
+    fontWeight: '800',
+    color: C.dark,
+    marginBottom: 5,
+  },
+  muted: {fontSize: 12, lineHeight: 18, color: C.muted, marginTop: 4},
+  sheepRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    marginTop: 8,
+  },
+  sheepText: {fontSize: 12, fontWeight: '700', color: C.green},
+
+  addCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 11,
+    padding: 15,
+    marginTop: 4,
+    borderRadius: 17,
+    backgroundColor: C.pale,
+  },
+  addText: {flex: 1, fontSize: 13, fontWeight: '700', color: C.dark},
+
+  state: {
+    minHeight: 160,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
+  },
+  card: {
+    padding: 22,
+    backgroundColor: C.white,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: C.border,
+    alignItems: 'center',
+  },
+  emptyCard: {
+    padding: 23,
+    backgroundColor: C.white,
+    borderRadius: 23,
+    borderWidth: 1,
+    borderColor: C.border,
+    alignItems: 'center',
+  },
+  emptyIcon: {
+    width: 95,
+    height: 95,
+    borderRadius: 29,
+    backgroundColor: C.pale,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 17,
+  },
+  emptyTitle: {
+    fontSize: 19,
+    fontWeight: '800',
+    color: C.dark,
+    textAlign: 'center',
+  },
+  emptyText: {
+    fontSize: 13,
+    lineHeight: 20,
+    color: C.muted,
+    textAlign: 'center',
+    marginVertical: 12,
+  },
+  skip: {padding: 13},
+  skipText: {fontSize: 13, fontWeight: '700', color: C.green},
+  footer: {
+    textAlign: 'center',
+    fontSize: 9,
+    letterSpacing: 1.2,
+    fontWeight: '700',
+    color: '#94A197',
+    marginTop: 28,
   },
 });
